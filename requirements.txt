@@ -1,0 +1,8 @@
+streamlit
+plotly
+pandas
+numpy
+anndata
+scanpy
+squidpy
+scikit-image
