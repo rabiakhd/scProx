@@ -9,19 +9,55 @@ st.title("scProx — Precision Oncology Dashboard")
 
 # ---- Sidebar ----
 st.sidebar.header("Controls")
-data_mode = st.sidebar.selectbox("Data source", ["Upload .h5ad", "Pick from E:\\scProx_mamba\\results"], index=1)
+
+# Where the demo data lives in the repo (you pushed under data/raw/...)
+SECTION_PATHS = {
+    "Section 1": "data/raw/section1",
+    "Section 2": "data/raw/section2",
+}
+
+data_mode = st.sidebar.selectbox(
+    "Data source",
+    ["Bundled demo data", "Upload .h5ad"],
+    index=0,
+)
 
 adata = None
-if data_mode == "Upload .h5ad":
+
+def read_h5ad_uploaded(uploaded_file):
+    # anndata prefers a filename or h5py object; write to a temp file for reliability
+    import tempfile
+    from pathlib import Path
+    tmp = tempfile.NamedTemporaryFile(suffix=".h5ad", delete=False)
+    tmp.write(uploaded_file.getvalue())
+    tmp.flush(); tmp.close()
+    try:
+        return ad.read_h5ad(tmp.name)
+    finally:
+        # clean up best-effort
+        try:
+            Path(tmp.name).unlink(missing_ok=True)
+        except Exception:
+            pass
+
+if data_mode == "Bundled demo data":
+    # Pick a section and auto-detect the first .h5ad in that folder
+    section = st.sidebar.selectbox("Slide section", list(SECTION_PATHS.keys()))
+    folder = Path(SECTION_PATHS[section])
+    h5ads = sorted(folder.glob("*.h5ad"))
+    if not h5ads:
+        st.sidebar.error(f"No .h5ad found in {folder}")
+    else:
+        pick = st.sidebar.selectbox("Select file", [p.name for p in h5ads])
+        adata = ad.read_h5ad(folder / pick)
+
+elif data_mode == "Upload .h5ad":
     up = st.sidebar.file_uploader("Upload AnnData (.h5ad)", type=["h5ad"])
-    if up:
-        adata = ad.read_h5ad(up)
-else:
-    results_dir = Path(r"E:\scProx_mamba\results")
-    files = sorted(results_dir.glob("*.h5ad"))
-    pick = st.sidebar.selectbox("Select file", [f.name for f in files]) if files else None
-    if pick:
-        adata = ad.read_h5ad(results_dir / pick)
+    if up is not None:
+        try:
+            adata = read_h5ad_uploaded(up)
+        except Exception as ex:
+            st.sidebar.error(f"Could not read uploaded file: {ex}")
 
 targets = ["ESR1", "PNCK", "GAK", "BUB1", "BUB1B"]
 e3s = ["CRBN", "VHL", "MDM2", "RNF114", "DCAF15"]
